@@ -66,28 +66,7 @@ if (!fsOriginal.existsSync(uploadDir)) {
 // Mở thư mục uploads để frontend có thể xem
 app.use('/uploads', express.static(uploadDir));
 
-// --- CẤU HÌNH PHỤC VỤ CÁC FOLDER ẢNH CÓ SẴN (NgoaiThat4Web, etc.) ---
-// Debug: In ra cấu trúc thư mục để kiểm tra trên Render Logs
-const parentDir = path.join(process.cwd(), '..');
-console.log('--- DEBUG DIRECTORY STRUCTURE ---');
-console.log('Current CWD:', process.cwd());
-console.log('Parent Dir:', parentDir);
-try {
-  console.log('Files in Parent:', fsOriginal.readdirSync(parentDir));
-} catch (e) {
-  console.log('Error reading parent dir:', e.message);
-}
-
-// Map URL path chính xác theo tên trong DB
-// Cấu trúc thực tế: NgoaiThat4Web/images/file.webp
-app.use('/uploads/NgoaiThat4Web_images', express.static(path.join(parentDir, 'NgoaiThat4Web', 'images')));
-app.use('/uploads/NoiThat4Web_images', express.static(path.join(parentDir, 'NoiThat4Web', 'images')));
-app.use('/uploads/ThietBi4Web_images', express.static(path.join(parentDir, 'ThietBi4Web', 'images')));
-
-// Thử thêm map trực tiếp không có _images
-app.use('/uploads/NgoaiThat4Web', express.static(path.join(parentDir, 'NgoaiThat4Web', 'images')));
-app.use('/uploads/NoiThat4Web', express.static(path.join(parentDir, 'NoiThat4Web', 'images')));
-app.use('/uploads/ThietBi4Web', express.static(path.join(parentDir, 'ThietBi4Web', 'images')));
+// (Redundant static mappings removed - images are served via /uploads)
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -380,14 +359,29 @@ app.post('/api/auth/reset', async (req, res) => {
 });
 
 
-// ===== Products (ĐÃ CẬP NHẬT: BỎ BRAND, THÊM UPLOAD) =====
+// ===== Products =====
+
+// Helper to ensure full image URL
+const getFullImageUrl = (req, imagePath) => {
+  if (!imagePath) return '';
+  if (imagePath.startsWith('http')) return imagePath;
+  // If it starts with 'uploads/', we should ensure it's not doubled
+  const path = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
+  return `${req.protocol}://${req.get('host')}${path}`;
+};
 
 app.get('/api/products', async (req, res) => {
   try {
-    // Bỏ cột brand khỏi query (nếu bảng đã xóa cột) hoặc select * cũng được nếu cột vẫn còn
-    const result = await query('SELECT * FROM products ORDER BY id ASC');
-    res.json(result.rows);
-  } catch (err) { res.status(500).json({ message: 'Lỗi máy chủ' }); }
+    const result = await query('SELECT * FROM products ORDER BY id DESC');
+    const products = result.rows.map(p => ({
+      ...p,
+      image_path: getFullImageUrl(req, p.image_path)
+    }));
+    res.json(products);
+  } catch (err) { 
+    console.error('Error fetching products:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ khi tải sản phẩm' }); 
+  }
 });
 
 // Migration: Thêm cột brand, description, specifications nếu chưa có
@@ -405,17 +399,7 @@ app.get('/api/products', async (req, res) => {
   }
 })();
 
-// GET ALL PRODUCTS (Public - không cần auth)
-// GET ALL PRODUCTS (Public - không cần auth)
-app.get('/api/products', async (req, res) => {
-  try {
-    const result = await query('SELECT * FROM products ORDER BY id DESC');
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Error fetching products:', err);
-    res.status(500).json({ message: 'Lỗi máy chủ khi tải sản phẩm' });
-  }
-});
+// (Duplicate route removed)
 
 // GET SINGLE PRODUCT
 app.get('/api/products/:id', async (req, res) => {
@@ -425,7 +409,9 @@ app.get('/api/products/:id', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Sản phẩm không tồn tại' });
     }
-    res.json(result.rows[0]);
+    const product = result.rows[0];
+    product.image_path = getFullImageUrl(req, product.image_path);
+    res.json(product);
   } catch (err) {
     console.error('Error fetching product:', err);
     res.status(500).json({ message: 'Lỗi máy chủ' });
@@ -665,7 +651,7 @@ app.post('/api/orders', async (req, res) => {
   }
 });
 
-// API lấy danh sách đơn hàng cho Admin (đã có đủ thông tin)
+// API lấy danh sách đơn hàng cho Admin
 app.get('/api/admin/orders', auth, adminAuth, async (req, res) => {
   try {
     const sql = `
@@ -684,7 +670,19 @@ app.get('/api/admin/orders', auth, adminAuth, async (req, res) => {
       ORDER BY o.createdat DESC
     `;
     const result = await query(sql);
-    res.json(result.rows);
+    
+    // Transform image paths
+    const orders = result.rows.map(order => {
+      if (order.items) {
+        order.items = order.items.map(item => ({
+          ...item,
+          image_path: getFullImageUrl(req, item.image_path)
+        }));
+      }
+      return order;
+    });
+
+    res.json(orders);
   } catch (err) { console.error(err); res.status(500).json({ message: 'Lỗi máy chủ' }); }
 });
 
@@ -757,9 +755,34 @@ app.delete('/api/user/addresses/:id', auth, async (req, res) => {
 
 // Get My Orders
 app.get('/api/orders/my', auth, async (req, res) => {
-  const sql = `SELECT o.*, (SELECT json_agg(json_build_object('qty', oi.qty, 'pid', p.id, 'product', p)) FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id) as items FROM orders o WHERE o.user_id = (SELECT id FROM users WHERE email = $1) ORDER BY o.createdat DESC`;
-  const result = await query(sql, [req.user.email]);
-  res.json(result.rows);
+  const sql = `
+    SELECT o.*, 
+    (SELECT json_agg(json_build_object('qty', oi.qty, 'pid', p.id, 'product', p)) 
+     FROM order_items oi 
+     JOIN products p ON oi.product_id = p.id 
+     WHERE oi.order_id = o.id) as items 
+    FROM orders o 
+    WHERE o.user_id = (SELECT id FROM users WHERE email = $1) 
+    ORDER BY o.createdat DESC
+  `;
+  try {
+    const result = await query(sql, [req.user.email]);
+    const orders = result.rows.map(order => {
+      if (order.items) {
+        order.items = order.items.map(item => {
+          if (item.product) {
+            item.product.image_path = getFullImageUrl(req, item.product.image_path);
+          }
+          return item;
+        });
+      }
+      return order;
+    });
+    res.json(orders);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  }
 });
 
 app.put('/api/orders/:id/receive', auth, async (req, res) => {
@@ -850,12 +873,12 @@ app.get('/api/stats/overview', auth, async (req, res) => {
 
     // Top week
     const topWeekSql = `
-            SELECT p.name, p.part as brand, SUM(oi.qty) as qty
+            SELECT p.name, p.brand, SUM(oi.qty) as qty
             FROM order_items oi
             JOIN orders o ON oi.order_id = o.id
             JOIN products p ON oi.product_id = p.id
-            WHERE o.createdAt >= NOW() - INTERVAL '7 days'
-            GROUP BY p.id, p.name, p.part
+            WHERE o.createdat >= NOW() - INTERVAL '180 days'
+            GROUP BY p.id, p.name, p.brand
             ORDER BY qty DESC
             LIMIT 5
   `;
@@ -863,12 +886,12 @@ app.get('/api/stats/overview', auth, async (req, res) => {
 
     // Top month
     const topMonthSql = `
-            SELECT p.name, p.part as brand, SUM(oi.qty) as qty
+            SELECT p.name, p.brand, SUM(oi.qty) as qty
             FROM order_items oi
             JOIN orders o ON oi.order_id = o.id
             JOIN products p ON oi.product_id = p.id
-            WHERE o.createdAt >= NOW() - INTERVAL '30 days'
-            GROUP BY p.id, p.name, p.part
+            WHERE o.createdat >= NOW() - INTERVAL '180 days'
+            GROUP BY p.id, p.name, p.brand
             ORDER BY qty DESC
             LIMIT 5
   `;
@@ -892,9 +915,9 @@ app.get('/api/stats/traffic', auth, async (req, res) => {
   try {
     // Lấy số lượng đơn hàng theo ngày trong 30 ngày qua
     const sql = `
-            SELECT to_char(createdAt, 'YYYY-MM-DD') as date, COUNT(*) as count
+            SELECT to_char(createdat, 'YYYY-MM-DD') as date, COUNT(*) as count
             FROM orders
-            WHERE createdAt >= NOW() - INTERVAL '30 days'
+            WHERE createdat >= NOW() - INTERVAL '180 days'
             GROUP BY date
             ORDER BY date ASC
         `;

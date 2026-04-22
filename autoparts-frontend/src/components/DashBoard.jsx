@@ -42,7 +42,7 @@ function Stat({ label, value, icon, comparison, color = 'bg-gray-50' }) {
 const IconUser = <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 7.292 4 4 0 010-7.292zM18 16c0-1.892-3.79-3.417-8.417-3.417S1.167 14.108 1.167 16" /></svg>;
 const IconOrder = <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>;
 const IconRevenue = <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2v5a2 2 0 002 2h4a2 2 0 002-2v-5c0-1.105-1.343-2-3-2zM4 14h16M8 11V6a4 4 0 118 0v5" /></svg>;
-const IconProduct = <svg xmlns="http://www.w3c.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 16h14M3 6h18M3 18h18" /></svg>;
+const IconProduct = <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 16h14M3 6h18M3 18h18" /></svg>;
 
 // Component Dashboard chính (dùng export default)
 export default function DashBoard(){
